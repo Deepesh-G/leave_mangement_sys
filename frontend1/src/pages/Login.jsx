@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import API_BASE from '../config';   // ✅ FIXED IMPORT
+import { API_BASE } from '../config';
 
 export default function Login() {
   const nav = useNavigate();
