@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
-import API_BASE from "../config";
+import { API_BASE } from '../config';
 
 export default function EmployeeDashboard() {
   const { user, token } = useAuth();
