@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import API_BASE from '../config';   // ✅ FIXED import
+import { API_BASE } from '../config';
 
 export default function ApplyLeave() {
   const { token } = useAuth();
