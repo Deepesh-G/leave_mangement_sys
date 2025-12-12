@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
-import API_BASE from "../config";   // ✅ Correct default import
+import { API_BASE } from '../config';
 import "../styles/main.css";
 
 export default function ManagerDashboard() {
