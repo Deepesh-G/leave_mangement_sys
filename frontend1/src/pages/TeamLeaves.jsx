@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import API_BASE from "../config";   // ✅ FIXED import
+import { API_BASE } from '../config';
 
 export default function TeamLeaves() {
   const { token } = useAuth();
