@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API_BASE from "../config";   // ✅ FIXED IMPORT
+import { API_BASE } from '../config';
 
 export default function Register() {
   const nav = useNavigate();
