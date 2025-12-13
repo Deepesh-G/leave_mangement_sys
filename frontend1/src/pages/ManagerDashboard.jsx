@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/authentication"; // ✅ FIXED
+import { useAuth } from "../context/AuthContext"; // ✅ FIXED
 import Navbar from "../components/Navbar";
 import { API_BASE } from "../config";
 import "../styles/main.css";
