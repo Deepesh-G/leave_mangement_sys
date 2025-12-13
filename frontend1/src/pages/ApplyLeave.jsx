@@ -1,94 +1,102 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from "../context/AuthContext"; // ✅ FIXED IMPORT
-import { API_BASE } from '../config';
-import Navbar from '../components/Navbar';
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE } from "../config";
 
-export default function ApplyLeave() {
+export default function MyLeaves() {
   const { token } = useAuth();
-  const nav = useNavigate();
+  const [leaves, setLeaves] = useState([]);
 
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [type, setType] = useState('casual');
-  const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
+  // Fetch leaves
+  useEffect(() => {
+    if (!token) return;
 
-  const submit = async () => {
-    if (!start || !end || !reason) {
-      return alert("Please fill in all fields");
-    }
+    fetch(`${API_BASE}/api/leave/my`, {
+      headers: { Authorization: "Bearer " + token },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Unauthorized");
+        return res.json();
+      })
+      .then((data) => setLeaves(Array.isArray(data) ? data : []))
+      .catch(() => setLeaves([]));
+  }, [token]);
 
-    if (new Date(start) > new Date(end)) {
-      return alert("End date cannot be before start date");
-    }
+  // Cancel Leave
+  const cancelLeave = async (id) => {
+    if (!window.confirm("Cancel this leave?")) return;
 
-    if (!token) {
-      return alert("You are not logged in");
-    }
+    const res = await fetch(`${API_BASE}/api/leave/cancel/${id}`, {
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + token },
+    });
 
-    setLoading(true);
+    const data = await res.json();
+    alert(data.message || "Updated");
 
-    try {
-      const res = await fetch(`${API_BASE}/api/leave/apply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          startDate: start,
-          endDate: end,
-          leaveType: type,
-          reason,
-        }),
-      });
-
-      const d = await res.json();
-
-      if (!res.ok) {
-        alert(d.message || 'Apply failed');
-        setLoading(false);
-        return;
-      }
-
-      alert('Leave applied successfully!');
-      nav('/my-leaves');
-
-    } catch (e) {
-      console.error(e);
-      alert('Network error. Please try again.');
-    } finally {
-      setLoading(false);
+    if (res.ok) {
+      setLeaves((prev) => prev.filter((l) => l._id !== id));
     }
   };
 
   return (
     <div className="container">
-      <Navbar />
+      <h2>My Leaves</h2>
 
-      <div className="auth-container" style={{ maxWidth: '600px', margin: '40px auto' }}>
-        <h2>Apply for Leave</h2>
+      <div className="card">
+        {leaves.length === 0 ? (
+          <p>No leaves found</p>
+        ) : (
+          leaves.map((l) => (
+            <div className="list-item" key={l._id}>
+              <div>
+                <strong>{l.leaveType}</strong>
 
-        <label>Start Date</label>
-        <input type="date" value={start} onChange={e => setStart(e.target.value)} />
+                <div className="text-muted">
+                  {new Date(l.startDate).toLocaleDateString()} —{" "}
+                  {new Date(l.endDate).toLocaleDateString()}
+                </div>
 
-        <label>End Date</label>
-        <input type="date" value={end} onChange={e => setEnd(e.target.value)} />
+                <div style={{ marginTop: 6, fontWeight: "600" }}>
+                  Status:{" "}
+                  <span
+                    style={{
+                      color:
+                        l.status === "Approved"
+                          ? "green"
+                          : l.status === "Rejected"
+                          ? "red"
+                          : "#b58900",
+                    }}
+                  >
+                    {l.status}
+                  </span>
+                </div>
 
-        <label>Leave Type</label>
-        <select value={type} onChange={e => setType(e.target.value)}>
-          <option value="casual">Casual Leave</option>
-          <option value="sick">Sick Leave</option>
-          <option value="earned">Earned Leave</option>
-        </select>
+                {l.managerComments && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontStyle: "italic",
+                      color: "#444",
+                    }}
+                  >
+                    Manager: {l.managerComments}
+                  </div>
+                )}
+              </div>
 
-        <label>Reason</label>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} />
-
-        <button onClick={submit} disabled={loading}>
-          {loading ? "Submitting..." : "Submit Application"}
-        </button>
+              {l.status === "Pending" && (
+                <button
+                  className="btn-danger"
+                  style={{ marginTop: 10 }}
+                  onClick={() => cancelLeave(l._id)}
+                >
+                  Cancel Leave
+                </button>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
