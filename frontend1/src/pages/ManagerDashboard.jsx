@@ -18,7 +18,7 @@ export default function ManagerDashboard() {
   useEffect(() => {
     if (!token) return;
 
-    // This matches the NEW backend route we just made
+    // This matches the NEW backend route
     fetch(`${API_BASE}/api/manager/leave/team-list`, {
       headers: { Authorization: "Bearer " + token }
     })
