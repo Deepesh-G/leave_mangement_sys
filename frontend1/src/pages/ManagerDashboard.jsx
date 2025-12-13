@@ -16,7 +16,7 @@ export default function ManagerDashboard() {
   useEffect(() => {
     if (!token) return;
 
-    fetch(`${API_BASE}/api/auth/team-list`, {
+    fetch(`${API_BASE}/api/manager/team-list`, {
       headers: { Authorization: "Bearer " + token }
     })
       .then((res) => res.json())
