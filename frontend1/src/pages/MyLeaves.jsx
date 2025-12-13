@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from "../context/AuthContext";// ✅ FIXED
-import { API_BASE } from '../config';
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE } from "../config";
 
 export default function MyLeaves() {
   const { token } = useAuth();
@@ -11,27 +11,27 @@ export default function MyLeaves() {
     if (!token) return;
 
     fetch(`${API_BASE}/api/leave/my`, {
-      headers: { Authorization: 'Bearer ' + token }
+      headers: { Authorization: "Bearer " + token }
     })
-      .then((r) => {
-        if (!r.ok) throw new Error("Unauthorized");
-        return r.json();
+      .then((res) => {
+        if (!res.ok) throw new Error("Unauthorized");
+        return res.json();
       })
-      .then((d) => setLeaves(Array.isArray(d) ? d : []))
+      .then((data) => setLeaves(Array.isArray(data) ? data : []))
       .catch(() => setLeaves([]));
   }, [token]);
 
   // Cancel Leave
   const cancelLeave = async (id) => {
-    if (!window.confirm('Cancel this leave?')) return;
+    if (!window.confirm("Cancel this leave?")) return;
 
     const res = await fetch(`${API_BASE}/api/leave/cancel/${id}`, {
-      method: 'PATCH',
-      headers: { Authorization: 'Bearer ' + token }
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + token }
     });
 
     const data = await res.json();
-    alert(data.message || 'Updated');
+    alert(data.message || "Updated");
 
     if (res.ok) {
       setLeaves((prev) => prev.filter((l) => l._id !== id));
@@ -56,7 +56,7 @@ export default function MyLeaves() {
                   {new Date(l.endDate).toLocaleDateString()}
                 </div>
 
-                <div style={{ marginTop: 6, fontWeight: '600' }}>
+                <div style={{ marginTop: 6, fontWeight: "600" }}>
                   Status:{" "}
                   <span
                     style={{
@@ -65,7 +65,7 @@ export default function MyLeaves() {
                           ? "green"
                           : l.status === "Rejected"
                           ? "red"
-                          : "#b58900"
+                          : "#b58900",
                     }}
                   >
                     {l.status}
@@ -73,13 +73,13 @@ export default function MyLeaves() {
                 </div>
 
                 {l.managerComments && (
-                  <div style={{ marginTop: 8, fontStyle: 'italic', color: '#444' }}>
+                  <div style={{ marginTop: 8, fontStyle: "italic", color: "#444" }}>
                     Manager: {l.managerComments}
                   </div>
                 )}
               </div>
 
-              {l.status === 'Pending' && (
+              {l.status === "Pending" && (
                 <button
                   className="btn-danger"
                   style={{ marginTop: 10 }}
@@ -88,3 +88,10 @@ export default function MyLeaves() {
                   Cancel Leave
                 </button>
               )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
