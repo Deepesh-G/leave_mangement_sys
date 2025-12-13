@@ -7,11 +7,11 @@ const User = require("../models/User");
 ============================================================ */
 const getBalanceKey = (leaveType) => {
   if (!leaveType) return null;
-  const lower = leaveType.toLowerCase().trim();
 
-  if (lower.includes("casual")) return "casual";
-  if (lower.includes("sick")) return "sick";
-  if (lower.includes("earned")) return "earned";
+  const lower = leaveType.toLowerCase().trim();
+  if (lower === "casual") return "casual";
+  if (lower === "sick") return "sick";
+  if (lower === "earned") return "earned";
 
   return null;
 };
@@ -21,14 +21,17 @@ const getBalanceKey = (leaveType) => {
 ============================================================ */
 exports.applyLeave = async (req, res) => {
   try {
-    if (!req.user) {
+    const userId = req.user?.userId;
+    const role = req.user?.role;
+
+    if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     const { startDate, endDate, leaveType, reason } = req.body;
 
     if (!startDate || !endDate || !leaveType) {
-      return res.status(400).json({ message: "Missing fields" });
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
     const normalizedType = getBalanceKey(leaveType);
@@ -41,7 +44,7 @@ exports.applyLeave = async (req, res) => {
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
 
-    if (isNaN(start) || isNaN(end)) {
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
@@ -50,36 +53,43 @@ exports.applyLeave = async (req, res) => {
     }
 
     const days =
-      Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+      Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     if (days <= 0) {
       return res.status(400).json({ message: "Invalid leave duration" });
     }
 
-    const isManager = req.user.role === "manager";
+    // ✅ Ensure balance exists
+    let balance = await LeaveBalance.findOne({ userId });
+    if (!balance) {
+      balance = await LeaveBalance.create({
+        userId,
+        casual: 10,
+        sick: 10,
+        earned: 10,
+      });
+    }
+
+    if (balance[normalizedType] < days) {
+      return res.status(400).json({
+        message: `Insufficient ${normalizedType} leave balance`,
+      });
+    }
+
+    const isManager = role === "manager";
     const status = isManager ? "Approved" : "Pending";
 
     // Manager self-approval deduction
     if (isManager) {
-      try {
-        const balance = await LeaveBalance.findOne({ userId: req.user.userId });
-        if (balance && balance[normalizedType] !== undefined) {
-          balance[normalizedType] = Math.max(
-            0,
-            balance[normalizedType] - days
-          );
-          await balance.save();
-        }
-      } catch (err) {
-        console.error("Manager auto-deduction failed:", err);
-      }
+      balance[normalizedType] -= days;
+      await balance.save();
     }
 
     const leave = await LeaveApplication.create({
-      userId: req.user.userId,
+      userId,
       startDate,
       endDate,
-      leaveType: normalizedType, // ✅ ALWAYS normalized
+      leaveType: normalizedType,
       reason,
       days,
       status,
@@ -106,7 +116,8 @@ exports.getMyLeaves = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     res.json(leaves);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -121,24 +132,28 @@ exports.cancelLeave = async (req, res) => {
       userId: req.user.userId,
     });
 
-    if (!leave) return res.status(404).json({ message: "Leave not found" });
+    if (!leave) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
+
     if (leave.status !== "Pending") {
-      return res
-        .status(400)
-        .json({ message: "Only pending leaves can be cancelled" });
+      return res.status(400).json({
+        message: "Only pending leaves can be cancelled",
+      });
     }
 
     leave.status = "Cancelled";
     await leave.save();
 
     res.json({ message: "Leave cancelled", leave });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* ============================================================
-   4. TEAM LEAVES
+   4. TEAM LEAVES (PENDING)
 ============================================================ */
 exports.getTeamLeaves = async (req, res) => {
   try {
@@ -147,12 +162,14 @@ exports.getTeamLeaves = async (req, res) => {
 
     const leaves = await LeaveApplication.find({
       userId: { $in: ids },
+      status: "Pending",
     })
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
 
     res.json(leaves);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -162,33 +179,40 @@ exports.getTeamLeaves = async (req, res) => {
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
-    const leave = await LeaveApplication.findById(req.params.id).populate(
-      "userId"
-    );
+    const leave = await LeaveApplication.findById(req.params.id).populate("userId");
 
-    if (!leave) return res.status(404).json({ message: "Leave not found" });
+    if (!leave) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
+
     if (leave.status !== "Pending") {
       return res.status(400).json({ message: "Already processed" });
     }
+
+    let balance = await LeaveBalance.findOne({ userId: leave.userId._id });
+    if (!balance) {
+      balance = await LeaveBalance.create({
+        userId: leave.userId._id,
+        casual: 10,
+        sick: 10,
+        earned: 10,
+      });
+    }
+
+    if (balance[leave.leaveType] < leave.days) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    balance[leave.leaveType] -= leave.days;
+    await balance.save();
 
     leave.status = "Approved";
     leave.managerComments = req.body.managerComments || "Approved";
     await leave.save();
 
-    const balance = await LeaveBalance.findOne({
-      userId: leave.userId._id,
-    });
-
-    if (balance && balance[leave.leaveType] !== undefined) {
-      balance[leave.leaveType] = Math.max(
-        0,
-        balance[leave.leaveType] - leave.days
-      );
-      await balance.save();
-    }
-
     res.json({ message: "Approved", leave });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -199,14 +223,18 @@ exports.approveLeave = async (req, res) => {
 exports.rejectLeave = async (req, res) => {
   try {
     const leave = await LeaveApplication.findById(req.params.id);
-    if (!leave) return res.status(404).json({ message: "Leave not found" });
+
+    if (!leave) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
 
     leave.status = "Rejected";
     leave.managerComments = req.body.managerComments || "Rejected";
     await leave.save();
 
     res.json({ message: "Rejected", leave });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -226,7 +254,8 @@ exports.calendar = async (req, res) => {
     }).populate("userId", "name");
 
     res.json(leaves);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -236,11 +265,20 @@ exports.calendar = async (req, res) => {
 ============================================================ */
 exports.getBalance = async (req, res) => {
   try {
-    const balance = await LeaveBalance.findOne({
-      userId: req.user.userId,
-    });
-    res.json(balance || {});
-  } catch {
+    let balance = await LeaveBalance.findOne({ userId: req.user.userId });
+
+    if (!balance) {
+      balance = await LeaveBalance.create({
+        userId: req.user.userId,
+        casual: 10,
+        sick: 10,
+        earned: 10,
+      });
+    }
+
+    res.json(balance);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
