@@ -2,78 +2,37 @@ const express = require("express");
 const router = express.Router();
 
 const { protect, requireRole } = require("../middleware/authMiddleware");
+const ctrl = require("../controllers/leaveController"); // ✅ Import your controller
 const LeaveBalance = require("../models/LeaveBalance");
 const User = require("../models/User");
-// ASSUMPTION: You have a LeaveRequest model. If it's named "Leave", change this line.
-const LeaveRequest = require("../models/LeaveRequest"); 
 
 // ==========================================
-// ✅ NEW: Approve Leave Request
+// ✅ PART 1: Approval & Team Routes (Moved here)
+//URL: /api/manager/leave/approve/:id
 // ==========================================
-router.patch("/approve/:id", protect, requireRole("manager"), async (req, res) => {
-  try {
-    const { managerComments } = req.body;
-    const leaveId = req.params.id;
 
-    // 1. Find the leave request
-    const leaveRequest = await LeaveRequest.findById(leaveId);
-    if (!leaveRequest) {
-      return res.status(404).json({ message: "Leave request not found" });
-    }
+// Get pending team leaves
+router.get("/team", protect, requireRole("manager"), ctrl.getTeamLeaves);
 
-    // 2. Check if already processed
-    if (leaveRequest.status !== "Pending") {
-      return res.status(400).json({ message: "Leave request already processed" });
-    }
+// Approve leave
+router.patch("/approve/:id", protect, requireRole("manager"), ctrl.approveLeave);
 
-    // 3. Update status and comments
-    leaveRequest.status = "Approved";
-    leaveRequest.managerComments = managerComments || "Approved by manager";
-    
-    // 4. (Optional but Recommended) Deduct from Leave Balance here if needed
-    // logic would go here to find LeaveBalance and subtract days
-    
-    await leaveRequest.save();
+// Reject leave
+router.patch("/reject/:id", protect, requireRole("manager"), ctrl.rejectLeave);
 
-    res.json({ message: "Leave Approved Successfully", leaveRequest });
-  } catch (err) {
-    console.error("Approval error:", err);
-    res.status(500).json({ message: "Server error during approval" });
-  }
-});
+// Approved leaves calendar
+router.get("/calendar", protect, requireRole("manager"), ctrl.calendar);
+
+// Full team leave history
+router.get("/team-history", protect, requireRole("manager"), ctrl.teamHistory);
+
 
 // ==========================================
-// ✅ NEW: Reject Leave Request
+// ✅ PART 2: Balance Management (Inline Logic)
+//URL: /api/manager/leave/edit-balance/:employeeId
 // ==========================================
-router.patch("/reject/:id", protect, requireRole("manager"), async (req, res) => {
-  try {
-    const { managerComments } = req.body;
-    const leaveId = req.params.id;
 
-    const leaveRequest = await LeaveRequest.findById(leaveId);
-    if (!leaveRequest) {
-      return res.status(404).json({ message: "Leave request not found" });
-    }
-
-    if (leaveRequest.status !== "Pending") {
-      return res.status(400).json({ message: "Leave request already processed" });
-    }
-
-    leaveRequest.status = "Rejected";
-    leaveRequest.managerComments = managerComments || "Rejected by manager";
-    
-    await leaveRequest.save();
-
-    res.json({ message: "Leave Rejected", leaveRequest });
-  } catch (err) {
-    console.error("Rejection error:", err);
-    res.status(500).json({ message: "Server error during rejection" });
-  }
-});
-
-// ==========================================
-// EXISTING: Edit Balance (Kept this same)
-// ==========================================
+// Manager updates employee leave balance manually
 router.patch("/edit-balance/:employeeId", protect, requireRole("manager"), async (req, res) => {
   try {
     const { employeeId } = req.params;
@@ -97,9 +56,7 @@ router.patch("/edit-balance/:employeeId", protect, requireRole("manager"), async
   }
 });
 
-// ==========================================
-// EXISTING: Get Balance (Kept this same)
-// ==========================================
+// Fetch specific employee leave balance
 router.get("/balance/:employeeId", protect, requireRole("manager"), async (req, res) => {
   try {
     const { employeeId } = req.params;
