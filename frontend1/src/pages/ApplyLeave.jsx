@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/authentication'; // ✅ FIXED IMPORT
+import { useAuth } from "../context/AuthContext"; // ✅ FIXED IMPORT
 import { API_BASE } from '../config';
 import Navbar from '../components/Navbar';
 
