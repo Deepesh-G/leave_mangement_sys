@@ -1,5 +1,8 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext"; // Ensure AuthProvider is imported
+
+// Pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
@@ -10,14 +13,17 @@ import TeamLeaves from "./pages/TeamLeaves";
 import TeamHistory from "./pages/TeamHistory";
 import TeamCalendar from "./pages/TeamCalendar";
 import EditEmployeeLeave from "./pages/EditEmployeeLeave";
-import { useAuth } from "./context/AuthContext";
 
-function RequireAuth({ children }) {
-  const { token, loading } = useAuth();
+function RequireAuth({ children, allowedRole }) {
+  const { token, user, loading } = useAuth();
 
-  if (loading) return <div className="loading-screen">Loading...</div>;
-
+  if (loading) return <div className="loading-screen">Loading application...</div>;
   if (!token) return <Navigate to="/" />;
+  
+  // Optional: Role-based protection
+  if (allowedRole && user?.role !== allowedRole) {
+    return <Navigate to="/" />; 
+  }
 
   return children;
 }
@@ -25,82 +31,82 @@ function RequireAuth({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+      {/* We wrap routes in AuthProvider here if not done in main.jsx */}
+      <AuthProvider> 
+        <Routes>
+          {/* PUBLIC ROUTES */}
+          <Route path="/" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-        <Route
-          path="/employee"
-          element={
-            <RequireAuth>
-              <EmployeeDashboard />
-            </RequireAuth>
-          }
-        />
+          {/* EMPLOYEE ROUTES */}
+          <Route
+            path="/employee-dashboard" // ✅ Fixed to match Navbar
+            element={
+              <RequireAuth allowedRole="employee">
+                <EmployeeDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/apply-leave" // ✅ Fixed to match Navbar
+            element={
+              <RequireAuth allowedRole="employee">
+                <ApplyLeave />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/my-leaves"
+            element={
+              <RequireAuth allowedRole="employee">
+                <MyLeaves />
+              </RequireAuth>
+            }
+          />
 
-        <Route
-          path="/manager"
-          element={
-            <RequireAuth>
-              <ManagerDashboard />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/apply"
-          element={
-            <RequireAuth>
-              <ApplyLeave />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/my-leaves"
-          element={
-            <RequireAuth>
-              <MyLeaves />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/team-leaves"
-          element={
-            <RequireAuth>
-              <TeamLeaves />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/team-history"
-          element={
-            <RequireAuth>
-              <TeamHistory />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/team-calendar"
-          element={
-            <RequireAuth>
-              <TeamCalendar />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/edit-leave/:id"
-          element={
-            <RequireAuth>
-              <EditEmployeeLeave />
-            </RequireAuth>
-          }
-        />
-      </Routes>
+          {/* MANAGER ROUTES */}
+          <Route
+            path="/manager-dashboard" // ✅ Fixed to match Navbar
+            element={
+              <RequireAuth allowedRole="manager">
+                <ManagerDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/team-leaves"
+            element={
+              <RequireAuth allowedRole="manager">
+                <TeamLeaves />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/team-history"
+            element={
+              <RequireAuth allowedRole="manager">
+                <TeamHistory />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/team-calendar"
+            element={
+              <RequireAuth allowedRole="manager">
+                <TeamCalendar />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/edit-leave/:id"
+            element={
+              <RequireAuth allowedRole="manager">
+                <EditEmployeeLeave />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
