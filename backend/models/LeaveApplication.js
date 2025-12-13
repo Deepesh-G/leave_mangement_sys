@@ -20,7 +20,7 @@ const LeaveApplicationSchema = new mongoose.Schema(
 
     leaveType: {
       type: String,
-      enum: ["Casual", "Sick", "Earned"],
+      enum: ["casual", "sick", "earned"], // ✅ MUST MATCH CONTROLLER
       required: true,
     },
 
@@ -28,6 +28,11 @@ const LeaveApplicationSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+
+    days: {
+      type: Number,
+      required: true,
     },
 
     status: {
