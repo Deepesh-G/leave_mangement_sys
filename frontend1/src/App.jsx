@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/authentication"; // ✅ FIXED
 
 // Pages
 import Login from "./pages/Login";
@@ -15,13 +15,12 @@ import TeamCalendar from "./pages/TeamCalendar";
 import EditEmployeeLeave from "./pages/EditEmployeeLeave";
 
 function RequireAuth({ children, allowedRole }) {
-  const { token, user, loading } = useAuth();
+  const { token, user } = useAuth();
 
-  if (loading) return <div className="loading-screen">Loading...</div>;
   if (!token) return <Navigate to="/" />;
-  
+
   if (allowedRole && user?.role !== allowedRole) {
-    return <Navigate to="/" />; 
+    return <Navigate to="/" />;
   }
 
   return children;
@@ -30,7 +29,7 @@ function RequireAuth({ children, allowedRole }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider> 
+      <AuthProvider>
         <Routes>
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Login />} />
@@ -45,9 +44,8 @@ export default function App() {
               </RequireAuth>
             }
           />
-          {/* ✅ FIXED: Changed back to simple "/apply" */}
           <Route
-            path="/apply" 
+            path="/apply"
             element={
               <RequireAuth allowedRole="employee">
                 <ApplyLeave />
