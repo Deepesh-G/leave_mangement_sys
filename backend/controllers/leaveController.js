@@ -57,8 +57,33 @@ exports.getMyLeaves = async (req, res) => {
 };
 
 /* ============================================================
-   3. GET TEAM LEAVES (Manager - Pending & History)
-   ✅ This fixes the "Manager not getting applied leave" issue
+   3. CANCEL LEAVE (Employee) -> THIS WAS MISSING!
+============================================================ */
+exports.cancelLeave = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const leave = await LeaveApplication.findOne({
+      _id: id,
+      userId: req.user.userId,
+    });
+
+    if (!leave) return res.status(404).json({ message: "Leave not found" });
+
+    if (leave.status !== "Pending")
+      return res.status(400).json({ message: "Only pending leaves can be cancelled" });
+
+    leave.status = "Cancelled";
+    await leave.save();
+
+    res.json({ message: "Leave cancelled", leave });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* ============================================================
+   4. GET TEAM LEAVES (Manager - Pending & History)
 ============================================================ */
 exports.getTeamLeaves = async (req, res) => {
   try {
@@ -67,7 +92,6 @@ exports.getTeamLeaves = async (req, res) => {
     const ids = employees.map((e) => e._id);
 
     // 2. Find all leaves for these employees
-    // We sort by 'createdAt' descending so newest requests appear top
     const leaves = await LeaveApplication.find({ userId: { $in: ids } })
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
@@ -80,13 +104,12 @@ exports.getTeamLeaves = async (req, res) => {
 };
 
 /* ============================================================
-   4. GET MY TEAM MEMBERS (Manager Dashboard List)
-   ✅ NEW: This allows you to see "Total Employees" and their names
+   5. GET MY TEAM MEMBERS (Manager Dashboard List)
 ============================================================ */
 exports.getMyTeam = async (req, res) => {
   try {
     const employees = await User.find({ managerId: req.user.userId })
-      .select("name email role managerCode"); // Only get necessary fields
+      .select("name email role managerCode");
     
     res.json(employees);
   } catch (err) {
@@ -96,7 +119,7 @@ exports.getMyTeam = async (req, res) => {
 };
 
 /* ============================================================
-   5. APPROVE / REJECT (Manager)
+   6. APPROVE LEAVE (Manager)
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
@@ -127,6 +150,9 @@ exports.approveLeave = async (req, res) => {
   }
 };
 
+/* ============================================================
+   7. REJECT LEAVE (Manager)
+============================================================ */
 exports.rejectLeave = async (req, res) => {
   try {
     const leave = await LeaveApplication.findById(req.params.id);
@@ -147,7 +173,7 @@ exports.rejectLeave = async (req, res) => {
 };
 
 /* ============================================================
-   6. CALENDAR & HISTORY
+   8. CALENDAR & HISTORY
 ============================================================ */
 exports.calendar = async (req, res) => {
   try {
@@ -163,10 +189,11 @@ exports.calendar = async (req, res) => {
   }
 };
 
-// Reuse getTeamLeaves logic for history if needed, or specific history logic
 exports.teamHistory = exports.getTeamLeaves;
 
-// Basic Balance Check
+/* ============================================================
+   9. GET BALANCE
+============================================================ */
 exports.getBalance = async (req, res) => {
   try {
     const balance = await LeaveBalance.findOne({ userId: req.user.userId });
