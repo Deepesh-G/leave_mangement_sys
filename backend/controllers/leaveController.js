@@ -3,6 +3,7 @@ const LeaveBalance = require("../models/LeaveBalance");
 const User = require("../models/User");
 
 // ✅ SMART MATCHER: Forces "Casual Leave" -> "casual"
+// This handles the mismatch if Frontend sends "Casual" but DB needs "casual"
 const getBalanceKey = (leaveType) => {
   if (!leaveType) return null;
   const lower = leaveType.toLowerCase();
@@ -15,7 +16,7 @@ const getBalanceKey = (leaveType) => {
 };
 
 /* ============================================================
-   1. APPLY LEAVE
+   1. APPLY LEAVE (Fixed 500 Error & Date Validation)
 ============================================================ */
 exports.applyLeave = async (req, res) => {
   try {
@@ -30,27 +31,45 @@ exports.applyLeave = async (req, res) => {
     const end = new Date(endDate);
     end.setHours(0, 0, 0, 0);
 
-    if (start > end)
-      return res.status(400).json({ message: "End date must be after start" });
+    // ✅ VALIDATION: Check if dates are real
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
 
+    if (start > end)
+      return res.status(400).json({ message: "End date must be after start date" });
+
+    // Calculate Days
     const days = (end.getTime() - start.getTime()) / (1000 * 3600 * 24) + 1;
 
-    // Manager Auto-Approval
+    // ✅ SAFETY CHECK: Ensure 'days' is a valid number before saving
+    if (isNaN(days) || days < 0) {
+        return res.status(400).json({ message: "Invalid day calculation" });
+    }
+
+    // Determine Role
     const isManager = req.user.role === 'manager';
     const initialStatus = isManager ? "Approved" : "Pending";
     const managerComment = isManager ? "Self Approved" : "";
 
-    // If Manager, deduct immediately
+    // ✅ MANAGER AUTO-DEDUCT (Wrapped in Safety Logic)
     if (isManager) {
-       const balance = await LeaveBalance.findOne({ userId: req.user.userId });
-       const key = getBalanceKey(leaveType); // Uses Smart Matcher
+       try {
+         const balance = await LeaveBalance.findOne({ userId: req.user.userId });
+         const key = getBalanceKey(leaveType); // Smart Match
 
-       if (balance && key && balance[key] !== undefined) {
-         balance[key] = Math.max(0, balance[key] - days);
-         await balance.save();
+         if (balance && key && balance[key] !== undefined) {
+           console.log(`[Auto-Deduct] Manager taking ${days} days of ${key}`);
+           balance[key] = Math.max(0, balance[key] - days);
+           await balance.save();
+         }
+       } catch (balanceErr) {
+         console.error("Warning: Manager balance update failed (ignoring)", balanceErr);
+         // We do NOT stop the leave creation if balance fails
        }
     }
 
+    // Create Leave Application
     const leave = await LeaveApplication.create({
       userId: req.user.userId,
       startDate,
@@ -63,9 +82,10 @@ exports.applyLeave = async (req, res) => {
     });
 
     res.json({ message: `Leave applied successfully (${initialStatus})`, leave });
+
   } catch (err) {
-    console.error("Apply error", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Apply Leave Error:", err);
+    res.status(500).json({ message: "Server error processing application" });
   }
 };
 
@@ -130,7 +150,6 @@ exports.getMyTeam = async (req, res) => {
 
 /* ============================================================
    6. APPROVE LEAVE (Manager)
-   ✅ THIS IS WHERE WE FIXED THE ISSUE
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
@@ -148,7 +167,6 @@ exports.approveLeave = async (req, res) => {
     // Deduct Balance Logic
     const balance = await LeaveBalance.findOne({ userId: leave.userId._id });
     if (balance) {
-      // ✅ USE SMART MATCHER HERE
       const key = getBalanceKey(leave.leaveType); 
       
       console.log(`Approving: ${leave.leaveType} -> Key: ${key}`);
