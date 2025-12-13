@@ -1,126 +1,127 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
 import { API_BASE } from '../config';
-import "../styles/main.css";
 
-export default function ManagerDashboard() {
-  const { token, user } = useAuth();
-  const [team, setTeam] = useState([]);
+export default function TeamLeaves() {
+  const { token } = useAuth();
+  const [leaves, setLeaves] = useState([]);
 
-  // Date filters for Calendar
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-
-  // Fetch manager's team
   useEffect(() => {
     if (!token) return;
 
-    fetch(`${API_BASE}/api/manager/team-list`, {
+    // ✅ FIXED: Updated URL to match managerLeaveRoutes.js
+    // Was: /api/manager/team-leaves (Wrong)
+    // Now: /api/manager/leave/team (Correct)
+    fetch(`${API_BASE}/api/manager/leave/team`, {
       headers: { Authorization: "Bearer " + token }
     })
-      .then((res) => res.json())
-      .then((data) => setTeam(Array.isArray(data) ? data : []))
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      })
+      .then((data) => setLeaves(Array.isArray(data) ? data : []))
       .catch((err) => {
-        console.error("Team fetch error:", err);
-        setTeam([]);
+        console.error(err);
+        setLeaves([]);
       });
   }, [token]);
 
-  // Navigate to calendar with filters
-  const goToCalendar = () => {
-    const url = `/team-calendar?from=${fromDate || ""}&to=${toDate || ""}`;
-    window.location.href = url;
+  // Approve or Reject
+  const act = async (id, action) => {
+    const comments = prompt("Manager comment (optional)") || "";
+    
+    // Ensure action is lowercase to match route ("approve" or "reject")
+    const actionUrl = action.toLowerCase();
+
+    // ✅ FIXED: Updated URL to match managerLeaveRoutes.js
+    // Was: /api/leave/... (Wrong - this is for employees)
+    // Now: /api/manager/leave/... (Correct - this is for managers)
+    try {
+      const res = await fetch(`${API_BASE}/api/manager/leave/${actionUrl}/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token
+        },
+        body: JSON.stringify({ managerComments: comments })
+      });
+
+      const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.message || "Error processing request");
+        return;
+      }
+
+      alert(data.message || "Done");
+
+      // Update UI instantly without refreshing
+      if (data.leave || data.leaveRequest) {
+        // Backend might return "leave" or "leaveRequest" depending on controller
+        const updatedLeave = data.leave || data.leaveRequest; 
+        setLeaves((prev) =>
+          prev.map((l) => (l._id === id ? updatedLeave : l))
+        );
+      } else {
+        // Fallback: simple status update if backend didn't return full object
+        setLeaves((prev) =>
+            prev.map((l) => (l._id === id ? { ...l, status: action === "approve" ? "Approved" : "Rejected" } : l))
+        );
+      }
+    } catch (error) {
+      console.error("Action error:", error);
+      alert("Failed to connect to server");
+    }
   };
 
   return (
     <div className="container">
-      <Navbar />
+      <h2>Team Leaves</h2>
 
-      <div className="header">
-        <h2>Manager Dashboard</h2>
-      </div>
+      <div className="card">
+        {leaves.length === 0 ? (
+          <p>No team leave requests available.</p>
+        ) : (
+          leaves.map((l) => (
+            <div className="list-item" key={l._id}>
+              <div>
+                <strong>{l.userId?.name || "Unknown User"}</strong> — {l.leaveType}
+                <div className="text-muted">
+                  {new Date(l.startDate).toLocaleDateString()} →{" "}
+                  {new Date(l.endDate).toLocaleDateString()} ({l.days} days)
+                </div>
+                {l.reason && <div style={{ fontSize: "0.9em", color: "#555" }}>Reason: {l.reason}</div>}
+              </div>
 
-      <div className="dashboard-grid">
+              {/* Buttons */}
+              <div style={{ marginTop: 8 }}>
+                {l.status === "Pending" && (
+                  <>
+                    <button onClick={() => act(l._id, "approve")}>
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => act(l._id, "reject")}
+                      style={{ marginLeft: 8, backgroundColor: "#e74c3c" }}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
 
-        {/* LEFT COLUMN */}
-        <div>
-          {/* Manager Code */}
-          <div className="card">
-            <h3>Your Manager Code</h3>
-            <p className="code-box">{user?.managerCode || "N/A"}</p>
-          </div>
-
-          {/* Team List */}
-          <div className="card" style={{ marginTop: 14 }}>
-            <h3>Your Team Members</h3>
-
-            {team.length === 0 ? (
-              <p>No employees assigned to you yet.</p>
-            ) : (
-              <>
-                <p className="text-muted">Total Employees: {team.length}</p>
-
-                {team.map((emp) => (
-                  <div key={emp._id} className="list-item">
-                    <strong>{emp.name}</strong>
-                    <div className="text-muted">{emp.email}</div>
-
-                    {/* Edit Leave Link */}
-                    <p style={{ marginTop: 6 }}>
-                      <a
-                        href={`/edit-leave/${emp._id}`}
-                        style={{ color: "#0A58CA", fontWeight: 500 }}
-                      >
-                        ✏️ Edit Leave Balance
-                      </a>
-                    </p>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <aside>
-          {/* Quick Navigation */}
-          <div className="card">
-            <h3>Quick Actions</h3>
-            <p><a href="/team-leaves">View Team Leaves</a></p>
-            <p><a href="/team-history">View Team History</a></p>
-            <p><a href="/team-calendar">Team Calendar</a></p>
-          </div>
-
-          {/* Calendar Filter */}
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3>Search Calendar by Date</h3>
-
-            <div className="form-group">
-              <label>From Date</label>
-              <input
-                type="date"
-                className="input"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+                {l.status !== "Pending" && (
+                  <span style={{ 
+                    fontStyle: "italic", 
+                    fontWeight: "bold",
+                    color: l.status === "Approved" ? "green" : "red" 
+                  }}>
+                    Status: {l.status}
+                  </span>
+                )}
+              </div>
             </div>
-
-            <div className="form-group">
-              <label>To Date</label>
-              <input
-                type="date"
-                className="input"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-
-            <button className="btn btn-primary" onClick={goToCalendar}>
-              View in Calendar
-            </button>
-          </div>
-        </aside>
+          ))
+        )}
       </div>
     </div>
   );
