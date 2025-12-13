@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/authentication"; // ✅ FIXED
+import { AuthProvider, useAuth } from "./context/AuthContext";// ✅ FIXED
 
 // Pages
 import Login from "./pages/Login";
