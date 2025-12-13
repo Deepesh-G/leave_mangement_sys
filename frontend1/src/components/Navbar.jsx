@@ -36,7 +36,7 @@ export default function Navbar() {
           {/* Employee Specific Links */}
           {user.role === 'employee' && (
             <>
-              <Link to="/apply-leave" className="nav-link">Apply Leave</Link>
+              <Link to="/apply" className="nav-link">Apply Leave</Link>
               <Link to="/my-leaves" className="nav-link">My Leaves</Link>
             </>
           )}
