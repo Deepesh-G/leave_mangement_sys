@@ -63,8 +63,7 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: "Manager code required" });
       }
 
-      // ✅ FIX: Force Uppercase to match MGR-XXXX format exactly
-      // This prevents "mgr-123" failing to find "MGR-123"
+      // Force Uppercase to match MGR-XXXX format exactly
       const manager = await User.findOne({
         managerCode: managerCode.trim().toUpperCase(),
         role: "manager",
@@ -79,7 +78,7 @@ exports.register = async (req, res) => {
         email: email.trim().toLowerCase(),
         password: hashed,
         role: "employee",
-        managerId: manager._id, // ✅ Links employee to manager
+        managerId: manager._id, // Links employee to manager
       });
 
       await LeaveBalance.create({ userId: employee._id });
@@ -121,5 +120,27 @@ exports.login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    // ✅ NEW: If user is employee, fetch their manager's code to display on dashboard
-    let connectedManagerCode = null
+    // If user is employee, fetch their manager's code to display on dashboard
+    let connectedManagerCode = null;
+    if (user.role === 'employee' && user.managerId) {
+        const manager = await User.findById(user.managerId);
+        if (manager) connectedManagerCode = manager.managerCode;
+    }
+
+    return res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        managerId: user.managerId || null,
+        managerCode: user.managerCode || connectedManagerCode,
+      },
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+}; // <--- THIS BRACE WAS MISSING
