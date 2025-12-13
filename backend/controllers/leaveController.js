@@ -2,96 +2,97 @@ const LeaveApplication = require("../models/LeaveApplication");
 const LeaveBalance = require("../models/LeaveBalance");
 const User = require("../models/User");
 
-// ✅ HELPER: Matches Frontend values ("casual") to Database fields ("casual")
+/* ============================================================
+   HELPER — Normalize leave type
+============================================================ */
 const getBalanceKey = (leaveType) => {
   if (!leaveType) return null;
   const lower = leaveType.toLowerCase().trim();
-  
-  // 1. Direct match (Since you updated frontend to small case)
-  if (lower === "casual") return "casual";
-  if (lower === "sick") return "sick";
-  if (lower === "earned") return "earned";
-  
-  // 2. Fallback (If frontend sends "Casual Leave")
+
   if (lower.includes("casual")) return "casual";
   if (lower.includes("sick")) return "sick";
   if (lower.includes("earned")) return "earned";
-  
-  return null; 
+
+  return null;
 };
 
 /* ============================================================
-   1. APPLY LEAVE (Fixed 500 Error & Safe Deduction)
+   1. APPLY LEAVE
 ============================================================ */
 exports.applyLeave = async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const { startDate, endDate, leaveType, reason } = req.body;
 
-    // 1. Validate Fields
-    if (!startDate || !endDate || !leaveType)
+    if (!startDate || !endDate || !leaveType) {
       return res.status(400).json({ message: "Missing fields" });
+    }
 
-    // 2. Validate Dates
+    const normalizedType = getBalanceKey(leaveType);
+    if (!normalizedType) {
+      return res.status(400).json({ message: "Invalid leave type" });
+    }
+
     const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
+    start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    if (isNaN(start) || isNaN(end)) {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
-    if (start > end)
+    if (start > end) {
       return res.status(400).json({ message: "End date must be after start date" });
-
-    const days = (end.getTime() - start.getTime()) / (1000 * 3600 * 24) + 1;
-
-    if (isNaN(days) || days < 0) {
-        return res.status(400).json({ message: "Invalid day calculation" });
     }
 
-    // 3. Determine Role (Safe Check)
-    const userRole = req.user && req.user.role ? req.user.role : 'employee';
-    const isManager = userRole === 'manager';
-    
-    const initialStatus = isManager ? "Approved" : "Pending";
-    const managerComment = isManager ? "Self Approved" : "";
+    const days =
+      Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
-    // 4. MANAGER AUTO-DEDUCTION (Wrapped in try/catch to prevent 500 crash)
+    if (days <= 0) {
+      return res.status(400).json({ message: "Invalid leave duration" });
+    }
+
+    const isManager = req.user.role === "manager";
+    const status = isManager ? "Approved" : "Pending";
+
+    // Manager self-approval deduction
     if (isManager) {
-       try {
-         const balance = await LeaveBalance.findOne({ userId: req.user.userId });
-         
-         // Get the correct database key (casual/sick/earned)
-         const key = getBalanceKey(leaveType); 
-
-         if (balance && key && balance[key] !== undefined) {
-           balance[key] = Math.max(0, balance[key] - days);
-           await balance.save();
-         }
-       } catch (error) {
-         console.error("Manager auto-deduction failed (ignoring):", error);
-         // We continue creating the leave even if deduction fails
-       }
+      try {
+        const balance = await LeaveBalance.findOne({ userId: req.user.userId });
+        if (balance && balance[normalizedType] !== undefined) {
+          balance[normalizedType] = Math.max(
+            0,
+            balance[normalizedType] - days
+          );
+          await balance.save();
+        }
+      } catch (err) {
+        console.error("Manager auto-deduction failed:", err);
+      }
     }
 
-    // 5. Create Leave
     const leave = await LeaveApplication.create({
       userId: req.user.userId,
       startDate,
       endDate,
-      leaveType, // Saves "casual", "sick", etc.
+      leaveType: normalizedType, // ✅ ALWAYS normalized
       reason,
       days,
-      status: initialStatus,
-      managerComments: managerComment
+      status,
+      managerComments: isManager ? "Self Approved" : "",
     });
 
-    res.json({ message: `Leave applied successfully (${initialStatus})`, leave });
-
+    res.json({
+      message: `Leave applied successfully (${status})`,
+      leave,
+    });
   } catch (err) {
     console.error("Apply Leave Error:", err);
-    res.status(500).json({ message: "Server error processing application" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -100,9 +101,12 @@ exports.applyLeave = async (req, res) => {
 ============================================================ */
 exports.getMyLeaves = async (req, res) => {
   try {
-    const leaves = await LeaveApplication.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+    const leaves = await LeaveApplication.find({
+      userId: req.user.userId,
+    }).sort({ createdAt: -1 });
+
     res.json(leaves);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -112,56 +116,57 @@ exports.getMyLeaves = async (req, res) => {
 ============================================================ */
 exports.cancelLeave = async (req, res) => {
   try {
-    const { id } = req.params;
-    const leave = await LeaveApplication.findOne({ _id: id, userId: req.user.userId });
+    const leave = await LeaveApplication.findOne({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
     if (!leave) return res.status(404).json({ message: "Leave not found" });
-    if (leave.status !== "Pending") return res.status(400).json({ message: "Only pending leaves can be cancelled" });
+    if (leave.status !== "Pending") {
+      return res
+        .status(400)
+        .json({ message: "Only pending leaves can be cancelled" });
+    }
 
     leave.status = "Cancelled";
     await leave.save();
+
     res.json({ message: "Leave cancelled", leave });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* ============================================================
-   4. GET TEAM LEAVES
+   4. TEAM LEAVES
 ============================================================ */
 exports.getTeamLeaves = async (req, res) => {
   try {
     const employees = await User.find({ managerId: req.user.userId });
     const ids = employees.map((e) => e._id);
-    const leaves = await LeaveApplication.find({ userId: { $in: ids } })
+
+    const leaves = await LeaveApplication.find({
+      userId: { $in: ids },
+    })
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
+
     res.json(leaves);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* ============================================================
-   5. GET MY TEAM
-============================================================ */
-exports.getMyTeam = async (req, res) => {
-  try {
-    const employees = await User.find({ managerId: req.user.userId }).select("name email role managerCode");
-    res.json(employees);
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-/* ============================================================
-   6. APPROVE LEAVE (Safe Deduction Logic)
+   5. APPROVE LEAVE
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
-    const leave = await LeaveApplication.findById(req.params.id).populate("userId");
-    if (!leave) return res.status(404).json({ message: "Leave not found" });
+    const leave = await LeaveApplication.findById(req.params.id).populate(
+      "userId"
+    );
 
+    if (!leave) return res.status(404).json({ message: "Leave not found" });
     if (leave.status !== "Pending") {
       return res.status(400).json({ message: "Already processed" });
     }
@@ -170,53 +175,44 @@ exports.approveLeave = async (req, res) => {
     leave.managerComments = req.body.managerComments || "Approved";
     await leave.save();
 
-    // ✅ DEDUCTION LOGIC
-    try {
-      const balance = await LeaveBalance.findOne({ userId: leave.userId._id });
-      if (balance) {
-        // Use helper to match "casual" correctly
-        const key = getBalanceKey(leave.leaveType); 
-        
-        if (key && balance[key] !== undefined) {
-          balance[key] = Math.max(0, balance[key] - leave.days);
-          await balance.save();
-        }
-      }
-    } catch (deductErr) {
-       console.error("Balance deduction error:", deductErr);
+    const balance = await LeaveBalance.findOne({
+      userId: leave.userId._id,
+    });
+
+    if (balance && balance[leave.leaveType] !== undefined) {
+      balance[leave.leaveType] = Math.max(
+        0,
+        balance[leave.leaveType] - leave.days
+      );
+      await balance.save();
     }
 
     res.json({ message: "Approved", leave });
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* ============================================================
-   7. REJECT LEAVE
+   6. REJECT LEAVE
 ============================================================ */
 exports.rejectLeave = async (req, res) => {
   try {
     const leave = await LeaveApplication.findById(req.params.id);
     if (!leave) return res.status(404).json({ message: "Leave not found" });
 
-    if (leave.status !== "Pending") {
-      return res.status(400).json({ message: "Already processed" });
-    }
-
     leave.status = "Rejected";
     leave.managerComments = req.body.managerComments || "Rejected";
     await leave.save();
 
     res.json({ message: "Rejected", leave });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* ============================================================
-   8. CALENDAR (Approved Only)
+   7. CALENDAR
 ============================================================ */
 exports.calendar = async (req, res) => {
   try {
@@ -226,25 +222,25 @@ exports.calendar = async (req, res) => {
 
     const leaves = await LeaveApplication.find({
       userId: { $in: ids },
-      status: { $regex: /^approved$/i }, 
+      status: "Approved",
     }).populate("userId", "name");
 
     res.json(leaves);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-exports.teamHistory = exports.getTeamLeaves;
-
 /* ============================================================
-   9. GET BALANCE
+   8. GET BALANCE
 ============================================================ */
 exports.getBalance = async (req, res) => {
   try {
-    const balance = await LeaveBalance.findOne({ userId: req.user.userId });
+    const balance = await LeaveBalance.findOne({
+      userId: req.user.userId,
+    });
     res.json(balance || {});
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 };
