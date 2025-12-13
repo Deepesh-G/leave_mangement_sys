@@ -1,82 +1,134 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom"; // ✅ Import Link and useNavigate
+import { useAuth } from "../context/AuthContext";
+import Navbar from "../components/Navbar";
 import { API_BASE } from '../config';
+import "../styles/main.css";
 
-export default function EditEmployeeLeave() {
-  const { id } = useParams();            // employee ID
-  const { token } = useAuth();
-  const nav = useNavigate();
+export default function ManagerDashboard() {
+  const { token, user } = useAuth();
+  const [team, setTeam] = useState([]);
+  const navigate = useNavigate(); // ✅ Hook for navigation
 
-  const [balance, setBalance] = useState(null);
-  const [casual, setCasual] = useState(0);
-  const [sick, setSick] = useState(0);
-  const [earned, setEarned] = useState(0);
+  // Date filters for Calendar
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  // Load employee leave balance
+  // Fetch manager's team
   useEffect(() => {
     if (!token) return;
 
-    fetch(`${API_BASE}/api/leave/balance/${id}`, {
+    // NOTE: This assumes you have a "team-list" route in managerRoutes.js
+    // If this returns 404, ensure your backend has: router.get('/team-list', ...)
+    fetch(`${API_BASE}/api/manager/team-list`, {
       headers: { Authorization: "Bearer " + token }
     })
-      .then(res => res.json())
-      .then((data) => {
-        setBalance(data);
-        setCasual(data.casual);
-        setSick(data.sick);
-        setEarned(data.earned);
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch team");
+        return res.json();
       })
-      .catch(() => {
-        alert("Failed to load leave balance");
-        nav("/manager");
+      .then((data) => setTeam(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error("Team fetch error:", err);
+        setTeam([]);
       });
-  }, [id, token, nav]);
+  }, [token]);
 
-  const save = async () => {
-    const res = await fetch(`${API_BASE}/api/leave/update-balance/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token
-      },
-      body: JSON.stringify({ casual, sick, earned })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) return alert(data.message || "Update failed");
-
-    alert("Leave balance updated");
-    nav("/manager");
+  // Navigate to calendar with filters
+  const goToCalendar = () => {
+    // ✅ Uses React Router instead of window.location (No reload!)
+    navigate(`/team-calendar?from=${fromDate || ""}&to=${toDate || ""}`);
   };
-
-  if (!balance)
-    return (
-      <div className="container">
-        <p>Loading leave details...</p>
-      </div>
-    );
 
   return (
     <div className="container">
-      <h2>Edit Employee Leave Balance</h2>
+      <Navbar />
 
-      <div className="card">
-        <p><strong>{balance.name || "Employee"}</strong></p>
+      <div className="header">
+        <h2>Manager Dashboard</h2>
+      </div>
 
-        <label>Casual Leave</label>
-        <input type="number" value={casual} onChange={e => setCasual(e.target.value)} />
+      <div className="dashboard-grid">
 
-        <label>Sick Leave</label>
-        <input type="number" value={sick} onChange={e => setSick(e.target.value)} />
+        {/* LEFT COLUMN */}
+        <div>
+          {/* Manager Code */}
+          <div className="card">
+            <h3>Your Manager Code</h3>
+            <p className="code-box">{user?.managerCode || "N/A"}</p>
+          </div>
 
-        <label>Earned Leave</label>
-        <input type="number" value={earned} onChange={e => setEarned(e.target.value)} />
+          {/* Team List */}
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>Your Team Members</h3>
 
-        <button className="btn-primary" onClick={save} style={{ marginTop: 12 }}>
-          Save Changes
-        </button>
+            {team.length === 0 ? (
+              <p>No employees assigned to you yet.</p>
+            ) : (
+              <>
+                <p className="text-muted">Total Employees: {team.length}</p>
+
+                {team.map((emp) => (
+                  <div key={emp._id} className="list-item">
+                    <strong>{emp.name}</strong>
+                    <div className="text-muted">{emp.email}</div>
+
+                    {/* Edit Leave Link */}
+                    <p style={{ marginTop: 6 }}>
+                      <Link 
+                        to={`/edit-leave/${emp._id}`}
+                        style={{ color: "#0A58CA", fontWeight: 500, textDecoration: 'none' }}
+                      >
+                        ✏️ Edit Leave Balance
+                      </Link>
+                    </p>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <aside>
+          {/* Quick Navigation */}
+          <div className="card">
+            <h3>Quick Actions</h3>
+            {/* ✅ Using Link prevents full page reload */}
+            <p><Link to="/team-leaves">View Team Leaves</Link></p>
+            <p><Link to="/team-history">View Team History</Link></p>
+            <p><Link to="/team-calendar">Team Calendar</Link></p>
+          </div>
+
+          {/* Calendar Filter */}
+          <div className="card" style={{ marginTop: 16 }}>
+            <h3>Search Calendar by Date</h3>
+
+            <div className="form-group">
+              <label>From Date</label>
+              <input
+                type="date"
+                className="input"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>To Date</label>
+              <input
+                type="date"
+                className="input"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+
+            <button className="btn btn-primary" onClick={goToCalendar}>
+              View in Calendar
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );
