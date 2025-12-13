@@ -1,134 +1,123 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom"; // ✅ Import Link and useNavigate
-import { useAuth } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
-import "../styles/main.css";
 
-export default function ManagerDashboard() {
-  const { token, user } = useAuth();
-  const [team, setTeam] = useState([]);
-  const navigate = useNavigate(); // ✅ Hook for navigation
+export default function EditEmployeeLeave() {
+  const { id } = useParams();            // employee ID
+  const { token } = useAuth();
+  const nav = useNavigate();
 
-  // Date filters for Calendar
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [balance, setBalance] = useState(null);
+  const [casual, setCasual] = useState(0);
+  const [sick, setSick] = useState(0);
+  const [earned, setEarned] = useState(0);
 
-  // Fetch manager's team
+  // Load employee leave balance
   useEffect(() => {
     if (!token) return;
 
-    // NOTE: This assumes you have a "team-list" route in managerRoutes.js
-    // If this returns 404, ensure your backend has: router.get('/team-list', ...)
-    fetch(`${API_BASE}/api/manager/team-list`, {
+    // ✅ FIXED: Correct Manager Route for fetching balance
+    fetch(`${API_BASE}/api/manager/leave/balance/${id}`, {
       headers: { Authorization: "Bearer " + token }
     })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch team");
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to load");
         return res.json();
       })
-      .then((data) => setTeam(Array.isArray(data) ? data : []))
+      .then((data) => {
+        setBalance(data);
+        setCasual(data.casual || 0);
+        setSick(data.sick || 0);
+        setEarned(data.earned || 0);
+      })
       .catch((err) => {
-        console.error("Team fetch error:", err);
-        setTeam([]);
+        console.error(err);
+        alert("Failed to load leave balance or unauthorized.");
+        nav("/manager");
       });
-  }, [token]);
+  }, [id, token, nav]);
 
-  // Navigate to calendar with filters
-  const goToCalendar = () => {
-    // ✅ Uses React Router instead of window.location (No reload!)
-    navigate(`/team-calendar?from=${fromDate || ""}&to=${toDate || ""}`);
+  const save = async () => {
+    // ✅ FIXED: Correct Manager Route for updating balance
+    const res = await fetch(`${API_BASE}/api/manager/leave/edit-balance/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      // Ensure we send Numbers, not strings
+      body: JSON.stringify({ 
+        casual: Number(casual), 
+        sick: Number(sick), 
+        earned: Number(earned) 
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) return alert(data.message || "Update failed");
+
+    alert("Leave balance updated successfully");
+    nav("/manager");
   };
+
+  if (!balance)
+    return (
+      <div className="container">
+        <p>Loading leave details...</p>
+      </div>
+    );
 
   return (
     <div className="container">
-      <Navbar />
+      <h2>Edit Employee Leave Balance</h2>
 
-      <div className="header">
-        <h2>Manager Dashboard</h2>
-      </div>
+      <div className="card">
+        {/* Note: The balance object usually contains userId with name, check your schema */}
+        <p><strong>Employee ID:</strong> {id}</p>
 
-      <div className="dashboard-grid">
-
-        {/* LEFT COLUMN */}
-        <div>
-          {/* Manager Code */}
-          <div className="card">
-            <h3>Your Manager Code</h3>
-            <p className="code-box">{user?.managerCode || "N/A"}</p>
-          </div>
-
-          {/* Team List */}
-          <div className="card" style={{ marginTop: 14 }}>
-            <h3>Your Team Members</h3>
-
-            {team.length === 0 ? (
-              <p>No employees assigned to you yet.</p>
-            ) : (
-              <>
-                <p className="text-muted">Total Employees: {team.length}</p>
-
-                {team.map((emp) => (
-                  <div key={emp._id} className="list-item">
-                    <strong>{emp.name}</strong>
-                    <div className="text-muted">{emp.email}</div>
-
-                    {/* Edit Leave Link */}
-                    <p style={{ marginTop: 6 }}>
-                      <Link 
-                        to={`/edit-leave/${emp._id}`}
-                        style={{ color: "#0A58CA", fontWeight: 500, textDecoration: 'none' }}
-                      >
-                        ✏️ Edit Leave Balance
-                      </Link>
-                    </p>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
+        <div className="form-group">
+          <label>Casual Leave</label>
+          <input 
+            type="number" 
+            className="input"
+            value={casual} 
+            onChange={e => setCasual(e.target.value)} 
+          />
         </div>
 
-        {/* RIGHT COLUMN */}
-        <aside>
-          {/* Quick Navigation */}
-          <div className="card">
-            <h3>Quick Actions</h3>
-            {/* ✅ Using Link prevents full page reload */}
-            <p><Link to="/team-leaves">View Team Leaves</Link></p>
-            <p><Link to="/team-history">View Team History</Link></p>
-            <p><Link to="/team-calendar">Team Calendar</Link></p>
-          </div>
+        <div className="form-group">
+          <label>Sick Leave</label>
+          <input 
+            type="number" 
+            className="input"
+            value={sick} 
+            onChange={e => setSick(e.target.value)} 
+          />
+        </div>
 
-          {/* Calendar Filter */}
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3>Search Calendar by Date</h3>
+        <div className="form-group">
+          <label>Earned Leave</label>
+          <input 
+            type="number" 
+            className="input"
+            value={earned} 
+            onChange={e => setEarned(e.target.value)} 
+          />
+        </div>
 
-            <div className="form-group">
-              <label>From Date</label>
-              <input
-                type="date"
-                className="input"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>To Date</label>
-              <input
-                type="date"
-                className="input"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-
-            <button className="btn btn-primary" onClick={goToCalendar}>
-              View in Calendar
-            </button>
-          </div>
-        </aside>
+        <button className="btn btn-primary" onClick={save} style={{ marginTop: 12 }}>
+          Save Changes
+        </button>
+        
+        <button 
+          className="btn" 
+          onClick={() => nav("/manager")} 
+          style={{ marginTop: 12, marginLeft: 10, background: "#ccc" }}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
