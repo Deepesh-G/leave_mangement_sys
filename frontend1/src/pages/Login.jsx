@@ -1,70 +1,90 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE } from "../config";
+import "../styles/main.css"; // Ensure styles are imported
 
 export default function Login() {
-  const nav = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  const submit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {   // ✅ FIXED API URL
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password
-        })
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.message || 'Login failed');
+        alert(data.message || "Login failed");
+        setLoading(false);
         return;
       }
 
-      // Save in context
-      login(data);
+      // Save user data
+      login({ token: data.token, user: data.user });
 
-      // Redirect based on role
-      if (data.user.role === 'manager') nav('/manager');
-      else nav('/employee');
-
-    } catch (e) {
-      console.error(e);
-      alert('Network error');
+      // ✅ FIX: Redirect to the NEW dashboard paths
+      if (data.user.role === "manager") {
+        navigate("/manager-dashboard");
+      } else {
+        navigate("/employee-dashboard");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong. Please try again.");
+      setLoading(false);
     }
   };
 
   return (
-    <div className="auth-container">
-      <h2>Login</h2>
+    <div className="container">
+      <div className="auth-container">
+        <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Login</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Email Address</label>
+            <input
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-      <input 
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-      />
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
-      <input
-        placeholder="Password"
-        type="password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-      />
-
-      <button className="btn-primary" style={{ marginTop: 12 }} onClick={submit}>
-        Login
-      </button>
-
-      <p style={{ marginTop: 12 }}>
-        No account? <Link to="/register">Register</Link>
-      </p>
+          <button
+            className="btn-primary"
+            type="submit"
+            style={{ width: "100%", marginTop: "10px" }}
+            disabled={loading}
+          >
+            {loading ? "Signing in..." : "Login"}
+          </button>
+        </form>
+        <p style={{ textAlign: "center", marginTop: "15px", fontSize: "0.9rem" }}>
+          Don't have an account? <Link to="/register">Register here</Link>
+        </p>
+      </div>
     </div>
   );
 }
