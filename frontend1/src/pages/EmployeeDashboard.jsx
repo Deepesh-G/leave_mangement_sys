@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../context/authentication"; // ✅ FIXED
+import { useAuth } from "../context/AuthContext";// ✅ FIXED
 import Navbar from "../components/Navbar";
 import { API_BASE } from "../config";
 
