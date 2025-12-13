@@ -2,36 +2,41 @@ const LeaveApplication = require("../models/LeaveApplication");
 const LeaveBalance = require("../models/LeaveBalance");
 const User = require("../models/User");
 
-// ✅ SMART MATCHER: Forces "Casual Leave" -> "casual"
-// This handles the mismatch if Frontend sends "Casual" but DB needs "casual"
+// ✅ HELPER: Matches Frontend values ("casual") to Database fields ("casual")
 const getBalanceKey = (leaveType) => {
   if (!leaveType) return null;
-  const lower = leaveType.toLowerCase();
+  const lower = leaveType.toLowerCase().trim();
   
+  // 1. Direct match (Since you updated frontend to small case)
+  if (lower === "casual") return "casual";
+  if (lower === "sick") return "sick";
+  if (lower === "earned") return "earned";
+  
+  // 2. Fallback (If frontend sends "Casual Leave")
   if (lower.includes("casual")) return "casual";
   if (lower.includes("sick")) return "sick";
-  if (lower.includes("earned") || lower.includes("privilege")) return "earned";
+  if (lower.includes("earned")) return "earned";
   
   return null; 
 };
 
 /* ============================================================
-   1. APPLY LEAVE (Fixed 500 Error & Date Validation)
+   1. APPLY LEAVE (Fixed 500 Error & Safe Deduction)
 ============================================================ */
 exports.applyLeave = async (req, res) => {
   try {
     const { startDate, endDate, leaveType, reason } = req.body;
 
+    // 1. Validate Fields
     if (!startDate || !endDate || !leaveType)
       return res.status(400).json({ message: "Missing fields" });
 
-    // Normalize dates
+    // 2. Validate Dates
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
     end.setHours(0, 0, 0, 0);
 
-    // ✅ VALIDATION: Check if dates are real
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       return res.status(400).json({ message: "Invalid date format" });
     }
@@ -39,42 +44,43 @@ exports.applyLeave = async (req, res) => {
     if (start > end)
       return res.status(400).json({ message: "End date must be after start date" });
 
-    // Calculate Days
     const days = (end.getTime() - start.getTime()) / (1000 * 3600 * 24) + 1;
 
-    // ✅ SAFETY CHECK: Ensure 'days' is a valid number before saving
     if (isNaN(days) || days < 0) {
         return res.status(400).json({ message: "Invalid day calculation" });
     }
 
-    // Determine Role
-    const isManager = req.user.role === 'manager';
+    // 3. Determine Role (Safe Check)
+    const userRole = req.user && req.user.role ? req.user.role : 'employee';
+    const isManager = userRole === 'manager';
+    
     const initialStatus = isManager ? "Approved" : "Pending";
     const managerComment = isManager ? "Self Approved" : "";
 
-    // ✅ MANAGER AUTO-DEDUCT (Wrapped in Safety Logic)
+    // 4. MANAGER AUTO-DEDUCTION (Wrapped in try/catch to prevent 500 crash)
     if (isManager) {
        try {
          const balance = await LeaveBalance.findOne({ userId: req.user.userId });
-         const key = getBalanceKey(leaveType); // Smart Match
+         
+         // Get the correct database key (casual/sick/earned)
+         const key = getBalanceKey(leaveType); 
 
          if (balance && key && balance[key] !== undefined) {
-           console.log(`[Auto-Deduct] Manager taking ${days} days of ${key}`);
            balance[key] = Math.max(0, balance[key] - days);
            await balance.save();
          }
-       } catch (balanceErr) {
-         console.error("Warning: Manager balance update failed (ignoring)", balanceErr);
-         // We do NOT stop the leave creation if balance fails
+       } catch (error) {
+         console.error("Manager auto-deduction failed (ignoring):", error);
+         // We continue creating the leave even if deduction fails
        }
     }
 
-    // Create Leave Application
+    // 5. Create Leave
     const leave = await LeaveApplication.create({
       userId: req.user.userId,
       startDate,
       endDate,
-      leaveType,
+      leaveType, // Saves "casual", "sick", etc.
       reason,
       days,
       status: initialStatus,
@@ -149,7 +155,7 @@ exports.getMyTeam = async (req, res) => {
 };
 
 /* ============================================================
-   6. APPROVE LEAVE (Manager)
+   6. APPROVE LEAVE (Safe Deduction Logic)
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
@@ -164,17 +170,20 @@ exports.approveLeave = async (req, res) => {
     leave.managerComments = req.body.managerComments || "Approved";
     await leave.save();
 
-    // Deduct Balance Logic
-    const balance = await LeaveBalance.findOne({ userId: leave.userId._id });
-    if (balance) {
-      const key = getBalanceKey(leave.leaveType); 
-      
-      console.log(`Approving: ${leave.leaveType} -> Key: ${key}`);
-
-      if (key && balance[key] !== undefined) {
-        balance[key] = Math.max(0, balance[key] - leave.days);
-        await balance.save();
+    // ✅ DEDUCTION LOGIC
+    try {
+      const balance = await LeaveBalance.findOne({ userId: leave.userId._id });
+      if (balance) {
+        // Use helper to match "casual" correctly
+        const key = getBalanceKey(leave.leaveType); 
+        
+        if (key && balance[key] !== undefined) {
+          balance[key] = Math.max(0, balance[key] - leave.days);
+          await balance.save();
+        }
       }
+    } catch (deductErr) {
+       console.error("Balance deduction error:", deductErr);
     }
 
     res.json({ message: "Approved", leave });
@@ -217,7 +226,7 @@ exports.calendar = async (req, res) => {
 
     const leaves = await LeaveApplication.find({
       userId: { $in: ids },
-      status: { $regex: /^approved$/i }, // Case insensitive check
+      status: { $regex: /^approved$/i }, 
     }).populate("userId", "name");
 
     res.json(leaves);
