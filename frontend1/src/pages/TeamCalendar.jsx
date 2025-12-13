@@ -10,7 +10,7 @@ export default function TeamCalendar() {
   useEffect(() => {
     if (!token) return;
 
-    fetch(`${API_BASE}/api/leave/team-calendar`, {
+    fetch(`${API_BASE}/api/manager/leave/team-calendar`, {
       headers: { Authorization: "Bearer " + token }
     })
       .then((res) => res.json())
