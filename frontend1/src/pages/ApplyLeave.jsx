@@ -94,9 +94,9 @@ export default function ApplyLeave() {
             value={type} 
             onChange={e => setType(e.target.value)}
           >
-            <option value="Casual">Casual Leave</option>
-            <option value="Sick">Sick Leave</option>
-            <option value="Earned">Earned Leave</option>
+            <option value="casual">Casual Leave</option>
+            <option value="sick">Sick Leave</option>
+            <option value="earned">Earned Leave</option>
           </select>
         </div>
 
