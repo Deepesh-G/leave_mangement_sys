@@ -6,6 +6,7 @@ const ctrl = require("../controllers/leaveController");
 
 // =============================
 // EMPLOYEE ROUTES
+// Base URL in server.js: /api/leave
 // =============================
 
 // Apply for leave
@@ -19,24 +20,5 @@ router.get("/balance", protect, requireRole("employee"), ctrl.getBalance);
 
 // Cancel my leave
 router.patch("/cancel/:id", protect, requireRole("employee"), ctrl.cancelLeave);
-
-// =============================
-// MANAGER ROUTES
-// =============================
-
-// Pending team leaves
-router.get("/team", protect, requireRole("manager"), ctrl.getTeamLeaves);
-
-// Approve leave
-router.patch("/approve/:id", protect, requireRole("manager"), ctrl.approveLeave);
-
-// Reject leave
-router.patch("/reject/:id", protect, requireRole("manager"), ctrl.rejectLeave);
-
-// Approved leaves calendar
-router.get("/calendar", protect, requireRole("manager"), ctrl.calendar);
-
-// Full team leave history
-router.get("/team-history", protect, requireRole("manager"), ctrl.teamHistory);
 
 module.exports = router;
