@@ -10,8 +10,6 @@ function generateManagerCode() {
 
 /* ============================================================
    REGISTER USER
-   Manager → Creates managerCode
-   Employee → Requires managerCode
    ============================================================ */
 exports.register = async (req, res) => {
   try {
@@ -65,8 +63,10 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: "Manager code required" });
       }
 
+      // ✅ FIX: Force Uppercase to match MGR-XXXX format exactly
+      // This prevents "mgr-123" failing to find "MGR-123"
       const manager = await User.findOne({
-        managerCode: managerCode.trim(),
+        managerCode: managerCode.trim().toUpperCase(),
         role: "manager",
       });
 
@@ -79,7 +79,7 @@ exports.register = async (req, res) => {
         email: email.trim().toLowerCase(),
         password: hashed,
         role: "employee",
-        managerId: manager._id,
+        managerId: manager._id, // ✅ Links employee to manager
       });
 
       await LeaveBalance.create({ userId: employee._id });
@@ -97,7 +97,7 @@ exports.register = async (req, res) => {
 };
 
 /* ============================================================
-   LOGIN
+   LOGIN (Enhanced)
    ============================================================ */
 exports.login = async (req, res) => {
   try {
@@ -121,20 +121,5 @@ exports.login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    return res.json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        managerId: user.managerId || null,
-        managerCode: user.managerCode || null,
-      },
-    });
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ message: "Server error" });
-  }
-};
+    // ✅ NEW: If user is employee, fetch their manager's code to display on dashboard
+    let connectedManagerCode = null
