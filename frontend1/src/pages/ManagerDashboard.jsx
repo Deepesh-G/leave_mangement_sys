@@ -14,24 +14,23 @@ export default function ManagerDashboard() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  // Fetch manager's team
+  // ✅ NEW: Fetch the Team List (Names & Count)
   useEffect(() => {
     if (!token) return;
 
-    fetch(`${API_BASE}/api/manager/leave/team-history`, { // Using a safe endpoint to get team list or create a specific /team-list endpoint
-       // Note: If you don't have a specific "get all employees" endpoint, 
-       // you might need to add one or use the team-history one to extract names.
-       // For now, let's try to hit the team endpoint if you have one, or just catch the error.
-       headers: { Authorization: "Bearer " + token }
+    // This matches the NEW backend route we just made
+    fetch(`${API_BASE}/api/manager/leave/team-list`, {
+      headers: { Authorization: "Bearer " + token }
     })
       .then((res) => res.json())
       .then((data) => {
-         // This depends on what your backend returns. 
-         // If you don't have a pure "list employees" endpoint, this might be empty.
-         // But the dashboard will still load.
-         if(Array.isArray(data)) setTeam(data);
+         if(Array.isArray(data)) {
+            setTeam(data);
+         } else {
+            setTeam([]); // Safety check
+         }
       })
-      .catch((err) => console.error(err));
+      .catch((err) => console.error("Fetch team error:", err));
   }, [token]);
 
   const goToCalendar = () => {
@@ -47,23 +46,57 @@ export default function ManagerDashboard() {
       </div>
 
       <div className="dashboard-grid">
-        {/* LEFT COLUMN */}
+        {/* LEFT COLUMN: Manager Info & Team List */}
         <div>
+          {/* Manager Profile */}
           <div className="card">
-            <h3>Your Manager Profile</h3>
+            <h3>Your Profile</h3>
             <p><strong>Name:</strong> {user?.name}</p>
-            <p><strong>Email:</strong> {user?.email}</p>
-            <p><strong>Role:</strong> {user?.role}</p>
+            <p><strong>Manager Code:</strong> <span className="code-box">{user?.managerCode || "N/A"}</span></p>
+            <p className="text-muted" style={{fontSize: '0.85rem', marginTop: 8}}>
+              Share this code with new employees so they can join your team.
+            </p>
+          </div>
+
+          {/* Team Members List */}
+          <div className="card" style={{ marginTop: 16 }}>
+            <h3>Your Team ({team.length})</h3>
+            
+            {team.length === 0 ? (
+              <p className="text-muted">No employees found.</p>
+            ) : (
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {team.map(emp => (
+                  <div key={emp._id} className="list-item">
+                    <div>
+                      <strong>{emp.name}</strong>
+                      <div className="text-muted">{emp.email}</div>
+                    </div>
+                    <Link to={`/edit-leave/${emp._id}`} style={{fontSize:'0.85rem'}}>
+                      Edit Balance
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* RIGHT COLUMN: Actions */}
         <aside>
           <div className="card">
-            <h3>Quick Actions</h3>
-            <p><Link to="/team-leaves">View Team Inbox (Approvals)</Link></p>
-            <p><Link to="/team-history">View Team History</Link></p>
-            <p><Link to="/team-calendar">Team Calendar</Link></p>
+            <h3>Inbox & Actions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link to="/team-leaves" className="btn-primary" style={{textDecoration:'none', textAlign:'center'}}>
+                   📬 View Pending Requests
+                </Link>
+                <Link to="/team-history" className="btn" style={{textAlign:'center'}}>
+                   📜 View Past History
+                </Link>
+                <Link to="/team-calendar" className="btn" style={{textAlign:'center'}}>
+                   📅 View Team Calendar
+                </Link>
+            </div>
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
@@ -76,7 +109,9 @@ export default function ManagerDashboard() {
               <label>To Date</label>
               <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
-            <button className="btn-primary" onClick={goToCalendar}>View Calendar</button>
+            <button className="btn-primary" onClick={goToCalendar} style={{width:'100%', marginTop: 10}}>
+                Go
+            </button>
           </div>
         </aside>
       </div>
