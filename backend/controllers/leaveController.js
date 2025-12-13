@@ -26,6 +26,19 @@ exports.applyLeave = async (req, res) => {
     const balance = await LeaveBalance.findOne({ userId: req.user.userId });
     if (!balance) return res.status(404).json({ message: "Leave balance not found" });
 
+    // Manager Auto-Approval Logic
+    const initialStatus = req.user.role === 'manager' ? "Approved" : "Pending";
+    const managerComment = req.user.role === 'manager' ? "Self Approved" : "";
+
+    // If auto-approved, deduct balance immediately
+    if (initialStatus === "Approved") {
+       const type = leaveType.toLowerCase(); 
+       if (balance[type] !== undefined) {
+         balance[type] = Math.max(0, balance[type] - days);
+         await balance.save();
+       }
+    }
+
     // Create leave
     const leave = await LeaveApplication.create({
       userId: req.user.userId,
@@ -34,9 +47,11 @@ exports.applyLeave = async (req, res) => {
       leaveType,
       reason,
       days,
+      status: initialStatus,
+      managerComments: managerComment
     });
 
-    res.json({ message: "Leave applied successfully", leave });
+    res.json({ message: `Leave applied successfully (${initialStatus})`, leave });
   } catch (err) {
     console.error("Apply error", err);
     res.status(500).json({ message: "Server error" });
@@ -57,7 +72,7 @@ exports.getMyLeaves = async (req, res) => {
 };
 
 /* ============================================================
-   3. CANCEL LEAVE (Employee) -> THIS WAS MISSING!
+   3. CANCEL LEAVE (Employee)
 ============================================================ */
 exports.cancelLeave = async (req, res) => {
   try {
@@ -87,11 +102,9 @@ exports.cancelLeave = async (req, res) => {
 ============================================================ */
 exports.getTeamLeaves = async (req, res) => {
   try {
-    // 1. Find all employees belonging to this manager
     const employees = await User.find({ managerId: req.user.userId });
     const ids = employees.map((e) => e._id);
 
-    // 2. Find all leaves for these employees
     const leaves = await LeaveApplication.find({ userId: { $in: ids } })
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
@@ -119,7 +132,7 @@ exports.getMyTeam = async (req, res) => {
 };
 
 /* ============================================================
-   6. APPROVE LEAVE (Manager)
+   6. APPROVE LEAVE (Manager) -> ✅ FIXED BALANCE DEDUCTION
 ============================================================ */
 exports.approveLeave = async (req, res) => {
   try {
@@ -134,10 +147,10 @@ exports.approveLeave = async (req, res) => {
     leave.managerComments = req.body.managerComments || "Approved";
     await leave.save();
 
-    // Deduct Balance
+    // ✅ FIXED: Case-insensitive balance deduction
     const balance = await LeaveBalance.findOne({ userId: leave.userId._id });
     if (balance) {
-      const type = leave.leaveType.toLowerCase(); // casual, sick, earned
+      const type = leave.leaveType.toLowerCase(); 
       if (balance[type] !== undefined) {
         balance[type] = Math.max(0, balance[type] - leave.days);
         await balance.save();
@@ -146,6 +159,7 @@ exports.approveLeave = async (req, res) => {
 
     res.json({ message: "Approved", leave });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -173,18 +187,24 @@ exports.rejectLeave = async (req, res) => {
 };
 
 /* ============================================================
-   8. CALENDAR & HISTORY
+   8. CALENDAR (Approved Only) -> ✅ FIXED
 ============================================================ */
 exports.calendar = async (req, res) => {
   try {
     const employees = await User.find({ managerId: req.user.userId });
     const ids = employees.map((e) => e._id);
+    
+    // Add the Manager themselves so they see their own leaves too
+    ids.push(req.user.userId);
+
     const leaves = await LeaveApplication.find({
       userId: { $in: ids },
       status: "Approved",
     }).populate("userId", "name");
+
     res.json(leaves);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
