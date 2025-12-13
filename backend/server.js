@@ -28,9 +28,10 @@ app.get('/', (req, res) => {
 
 // ROUTE MOUNTING
 app.use('/api/auth', authRoutes);
-app.use('/api/leave', leaveRoutes);
-app.use('/api/manager', managerRoutes);
-app.use("/api/manager/leave", managerLeaveRoutes);
+app.use('/api/leave', leaveRoutes);       // Employee routes
+app.use('/api/manager', managerRoutes);   // General manager routes
+// 👇 THIS IS THE IMPORTANT ONE FOR APPROVALS
+app.use("/api/manager/leave", managerLeaveRoutes); 
 
 // Start Server
 const PORT = process.env.PORT || 5000;
