@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext"; // Ensure AuthProvider is imported
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Pages
 import Login from "./pages/Login";
@@ -17,10 +17,9 @@ import EditEmployeeLeave from "./pages/EditEmployeeLeave";
 function RequireAuth({ children, allowedRole }) {
   const { token, user, loading } = useAuth();
 
-  if (loading) return <div className="loading-screen">Loading application...</div>;
+  if (loading) return <div className="loading-screen">Loading...</div>;
   if (!token) return <Navigate to="/" />;
   
-  // Optional: Role-based protection
   if (allowedRole && user?.role !== allowedRole) {
     return <Navigate to="/" />; 
   }
@@ -31,7 +30,6 @@ function RequireAuth({ children, allowedRole }) {
 export default function App() {
   return (
     <BrowserRouter>
-      {/* We wrap routes in AuthProvider here if not done in main.jsx */}
       <AuthProvider> 
         <Routes>
           {/* PUBLIC ROUTES */}
@@ -40,15 +38,16 @@ export default function App() {
 
           {/* EMPLOYEE ROUTES */}
           <Route
-            path="/employee-dashboard" // ✅ Fixed to match Navbar
+            path="/employee-dashboard"
             element={
               <RequireAuth allowedRole="employee">
                 <EmployeeDashboard />
               </RequireAuth>
             }
           />
+          {/* ✅ FIXED: Changed back to simple "/apply" */}
           <Route
-            path="/apply-leave" // ✅ Fixed to match Navbar
+            path="/apply" 
             element={
               <RequireAuth allowedRole="employee">
                 <ApplyLeave />
@@ -66,7 +65,7 @@ export default function App() {
 
           {/* MANAGER ROUTES */}
           <Route
-            path="/manager-dashboard" // ✅ Fixed to match Navbar
+            path="/manager-dashboard"
             element={
               <RequireAuth allowedRole="manager">
                 <ManagerDashboard />
