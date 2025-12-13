@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/authentication'; // ✅ FIXED
+import { useAuth } from "../context/AuthContext"; // ✅ FIXED
 import { API_BASE } from '../config';
 
 export default function EditEmployeeLeave() {
