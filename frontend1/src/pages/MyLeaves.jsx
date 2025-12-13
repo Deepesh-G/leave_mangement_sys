@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authentication'; // ✅ FIXED
 import { API_BASE } from '../config';
 
 export default function MyLeaves() {
@@ -13,8 +13,11 @@ export default function MyLeaves() {
     fetch(`${API_BASE}/api/leave/my`, {
       headers: { Authorization: 'Bearer ' + token }
     })
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setLeaves(d))
+      .then((r) => {
+        if (!r.ok) throw new Error("Unauthorized");
+        return r.json();
+      })
+      .then((d) => setLeaves(Array.isArray(d) ? d : []))
       .catch(() => setLeaves([]));
   }, [token]);
 
@@ -30,7 +33,9 @@ export default function MyLeaves() {
     const data = await res.json();
     alert(data.message || 'Updated');
 
-    setLeaves((prev) => prev.filter((l) => l._id !== id));
+    if (res.ok) {
+      setLeaves((prev) => prev.filter((l) => l._id !== id));
+    }
   };
 
   return (
@@ -51,7 +56,6 @@ export default function MyLeaves() {
                   {new Date(l.endDate).toLocaleDateString()}
                 </div>
 
-                {/* Status */}
                 <div style={{ marginTop: 6, fontWeight: '600' }}>
                   Status:{" "}
                   <span
@@ -68,7 +72,6 @@ export default function MyLeaves() {
                   </span>
                 </div>
 
-                {/* Manager Comments */}
                 {l.managerComments && (
                   <div style={{ marginTop: 8, fontStyle: 'italic', color: '#444' }}>
                     Manager: {l.managerComments}
@@ -76,7 +79,6 @@ export default function MyLeaves() {
                 )}
               </div>
 
-              {/* Cancel Button */}
               {l.status === 'Pending' && (
                 <button
                   className="btn-danger"
@@ -86,10 +88,3 @@ export default function MyLeaves() {
                   Cancel Leave
                 </button>
               )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
